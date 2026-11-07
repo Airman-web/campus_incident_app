@@ -307,7 +307,7 @@ firebase deploy --only firestore:rules
 - **Who sees what:** students only see their own reports. Only staff see everyone's.
 - **ALU only:** sign up is restricted to ALU email domains, and the email must be verified.
 - **Fake or abusive content:** reports are tied to a verified account and name, text lengths are limited, and photos must come from the app's own Cloudinary account.
-- **Location data in photos:** report photos are re-encoded and resized by `image_picker` before upload. The banner image bundled with the app was resized from 3 MB to 0.4 MB and its GPS and camera EXIF data was removed.
+- **Location data in photos:** the banner image bundled with the app was resized from 3 MB to 0.4 MB and its GPS and camera EXIF data was removed. Report photos are resized by `image_picker` before upload, but on Android the resized copy can keep the original EXIF data, including location. Stripping it before upload is listed under Future Improvements.
 - **No secrets in the app:** only the Cloudinary cloud name and the unsigned upload preset are in the code. The Cloudinary API secret is never included.
 - **Safety:** the report form reminds students to contact campus security directly for emergencies.
 
@@ -451,9 +451,9 @@ Then pick it from the gallery's **Downloads** folder.
 **Cause:** the app was still uploading to Firebase Storage, which was never enabled.
 **Fix:** `StorageService` was rewritten to upload to Cloudinary. After changing packages, the app must be fully stopped and started again with `flutter run`. Hot reload is not enough.
 
-### 10. "You do not have permission to do that" right after verifying the email
-**Cause:** Firebase only puts `email_verified: true` into the user's login token after the token is refreshed, and the security rules read that token.
-**Fix:** after verification the app calls `user.reload()` and `getIdToken(true)` to fetch a fresh token before continuing.
+### 10. Preventing "permission denied" right after email verification
+**Risk:** Firebase only puts `email_verified: true` into the user's login token after the token is refreshed, and the security rules read that token. Without a refresh, a newly verified user could be refused.
+**Prevention:** after verification the app calls `user.reload()` and `getIdToken(true)` to fetch a fresh token before continuing.
 
 ### 11. `main.dart` suddenly reverted to the old starter code and would not build
 **Cause:** the file in the editor went back to an old version (likely from repeated undo), with a stray `ReportBanner(),` line that broke the brackets.
@@ -486,6 +486,7 @@ Then pick it from the gallery's **Downloads** folder.
 ## Future Improvements
 
 - A Cloud Function to delete Cloudinary photos and to sign uploads.
+- Strip EXIF location data from report photos before upload.
 - Push notifications when a report's status changes.
 - An admin screen for managing staff roles.
 - Assigning reports to a specific staff member or department.
