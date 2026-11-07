@@ -41,6 +41,15 @@ service cloud.firestore {
       return value is string && value.size() >= min && value.size() <= max;
     }
 
+    // A report has no photo, or a photo stored in our own Cloudinary account.
+    // This stops anyone saving a link to an image from somewhere else.
+    function validPhotoUrl(data) {
+      return !('photoUrl' in data)
+        || data.photoUrl == null
+        || (data.photoUrl is string
+            && data.photoUrl.matches('^https://res[.]cloudinary[.]com/lszoxzxr/.*'));
+    }
+
     // User profiles. A new account can only give itself the "staff" role
     // if it has a staff email. The Firebase Console skips these rules,
     // so an admin can still promote any account to staff there.
@@ -64,13 +73,14 @@ service cloud.firestore {
         && (resource.data.reporterId == request.auth.uid || isStaff());
 
       // A verified ALU user can create a report in their own name,
-      // and it must start as "submitted".
+      // it must start as "submitted", and any photo must be our own.
       allow create: if isVerified()
         && request.resource.data.reporterId == request.auth.uid
         && request.resource.data.status == 'submitted'
         && textBetween(request.resource.data.title, 5, 80)
         && textBetween(request.resource.data.description, 10, 1000)
-        && textBetween(request.resource.data.location, 2, 100);
+        && textBetween(request.resource.data.location, 2, 100)
+        && validPhotoUrl(request.resource.data);
 
       // Only staff can change a status, and only the status fields.
       allow update: if isStaff()
