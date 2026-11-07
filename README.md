@@ -496,6 +496,6 @@ Then pick it from the gallery's **Downloads** folder.
 
 ## Author
 
-**[Your full name]**, African Leadership University
+**Atigbi Emmanuel Ayomiku**, Software Engineering Student, African Leadership University
 
 Repository: [github.com/Airman-web/campus_incident_app](https://github.com/Airman-web/campus_incident_app)
