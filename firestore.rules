@@ -1,0 +1,89 @@
+rules_version = '2';
+
+// Security rules for Cloud Firestore.
+// These run on Google's servers, so they protect the data even if someone
+// changes the app or calls Firestore directly.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasAluEmail() {
+      return signedIn()
+        && request.auth.token.email.lower().matches('.*@(alustudent|alueducation)[.]com$');
+    }
+
+    function isVerified() {
+      return hasAluEmail() && request.auth.token.email_verified == true;
+    }
+
+    // Staff emails use the alueducation.com domain.
+    function hasStaffEmail() {
+      return signedIn()
+        && request.auth.token.email.lower().matches('.*@alueducation[.]com$');
+    }
+
+    // Staff = a verified alueducation.com account, OR an account whose
+    // role was set to "staff" in the Firebase Console.
+    function isStaff() {
+      return isVerified()
+        && (hasStaffEmail()
+            || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff');
+    }
+
+    function validStatus(status) {
+      return status in ['submitted', 'inProgress', 'resolved'];
+    }
+
+    function textBetween(value, min, max) {
+      return value is string && value.size() >= min && value.size() <= max;
+    }
+
+    // User profiles. A new account can only give itself the "staff" role
+    // if it has a staff email. The Firebase Console skips these rules,
+    // so an admin can still promote any account to staff there.
+    match /users/{userId} {
+      allow read: if (signedIn() && request.auth.uid == userId) || isStaff();
+      allow create: if hasAluEmail()
+        && request.auth.uid == userId
+        && (request.resource.data.role == 'student'
+            || (request.resource.data.role == 'staff' && hasStaffEmail()))
+        && request.resource.data.email == request.auth.token.email;
+      allow update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == resource.data.role;
+      allow delete: if false;
+    }
+
+    // Incident reports.
+    match /incidents/{incidentId} {
+      // Students read only their own reports. Staff read all of them.
+      allow read: if isVerified()
+        && (resource.data.reporterId == request.auth.uid || isStaff());
+
+      // A verified ALU user can create a report in their own name,
+      // and it must start as "submitted".
+      allow create: if isVerified()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.status == 'submitted'
+        && textBetween(request.resource.data.title, 5, 80)
+        && textBetween(request.resource.data.description, 10, 1000)
+        && textBetween(request.resource.data.location, 2, 100);
+
+      // Only staff can change a status, and only the status fields.
+      allow update: if isStaff()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'statusHistory', 'updatedAt'])
+        && validStatus(request.resource.data.status);
+
+      // Staff can delete any report. Students can delete their own report
+      // only while it is still "submitted".
+      allow delete: if isStaff()
+        || (isVerified()
+            && resource.data.reporterId == request.auth.uid
+            && resource.data.status == 'submitted');
+    }
+  }
+}
